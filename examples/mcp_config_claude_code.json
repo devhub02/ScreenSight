@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "screensight": {
+      "command": "screensight-mcp"
+    }
+  }
+}
