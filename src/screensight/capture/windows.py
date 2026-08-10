@@ -35,7 +35,7 @@ Write-Output $sb.ToString()
 
 class WindowsCapture(CaptureBackend):
     def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
-        script = _PS_SCRIPT.format(out_path=out_path.replace("\\", "\\\\"))
+        script = _PS_SCRIPT.replace("{out_path}", out_path.replace("\\", "\\\\"))
         try:
             proc = subprocess.run(
                 ["powershell.exe", "-NoProfile", "-Command", script],

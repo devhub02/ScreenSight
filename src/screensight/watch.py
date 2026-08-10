@@ -1,8 +1,15 @@
-"""Watch mode: poll the screen at an interval, only surface frames that changed.
+"""Bounded watch daemon — spawns a detached subprocess that polls
+``core.capture_once()`` on an interval, writes status to daemon.json,
+and self-terminates after *max_frames* changed frames or on error.
 
-The daemon is a separate OS process (not a thread inside the MCP server) so it
-can outlive a per-session MCP connection. It writes a pidfile and a status JSON
-file under ~/.screensight/ so the CLI and MCP tools can start/stop/poll it.
+Public API (called by CLI and MCP server):
+    start_daemon(interval, max_frames) -> dict
+    stop_daemon() -> dict
+    daemon_status() -> dict
+
+The daemon loop lives at the bottom of this file and is invoked via
+``python -m screensight.watch`` so it runs in its own OS process,
+not as a thread inside the MCP server.
 """
 from __future__ import annotations
 
@@ -12,166 +19,212 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 
-from . import config, core, diff, state
-
-DEFAULT_INTERVAL = config.DEFAULT_WATCH_INTERVAL
-DEFAULT_MAX_FRAMES = config.MAX_FRAMES_PER_WATCH
-
-
-def _write_status(status: dict) -> None:
-    config.ensure_base_dir()
-    config.DAEMON_STATUS_FILE.write_text(json.dumps(status, indent=2))
-
-
-def _read_status() -> dict:
-    if not config.DAEMON_STATUS_FILE.exists():
-        return {"status": "stopped"}
-    try:
-        return json.loads(config.DAEMON_STATUS_FILE.read_text())
-    except Exception:
-        return {"status": "stopped"}
+from .config import (
+    DAEMON_PID_FILE,
+    DAEMON_STATUS_FILE,
+    DEFAULT_WATCH_INTERVAL,
+    MAX_FRAMES_PER_WATCH,
+    ensure_base_dir,
+)
+from .core import capture_once
+from .diff import frame_changed, sha256_of_file
+from .state import is_on, turn_off
 
 
-def _write_pidfile(pid: int) -> None:
-    config.ensure_base_dir()
-    config.DAEMON_PID_FILE.write_text(str(pid))
+# ── Public helpers ────────────────────────────────────────────────────
+
+DEFAULT_INTERVAL = DEFAULT_WATCH_INTERVAL
+DEFAULT_MAX_FRAMES = MAX_FRAMES_PER_WATCH
 
 
-def _read_pidfile() -> int | None:
-    if not config.DAEMON_PID_FILE.exists():
+def start_daemon(interval: int = DEFAULT_INTERVAL, max_frames: int = DEFAULT_MAX_FRAMES) -> dict:
+    """Spawn a detached ``screensight-watch`` subprocess and return its
+    status dict.  If a daemon is already running, return that status
+    instead of spawning a second one."""
+    ensure_base_dir()
+
+    existing = _read_pid()
+    if existing and _process_alive(existing):
+        return {"running": True, "pid": existing, "message": "daemon already running"}
+
+    # Launch the daemon as a fully detached process.
+    # On Windows creationflags=DETACHED_PROCESS + no stdio is the
+    # equivalent of Unix setsid + devnull.
+    cmd = [sys.executable, "-m", "screensight.watch", str(interval), str(max_frames)]
+    kwargs: dict = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "stdin": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = (
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+        )
+    else:
+        kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(cmd, **kwargs)
+    _write_pid(proc.pid)
+    return {"running": True, "pid": proc.pid, "interval": interval, "max_frames": max_frames}
+
+
+def stop_daemon() -> dict:
+    """Send SIGTERM (or TerminateProcess on Windows) to the daemon, then
+    clean up the pidfile and status file."""
+    pid = _read_pid()
+    if pid is None:
+        _cleanup()
+        return {"running": False, "message": "no daemon running"}
+
+    if _process_alive(pid):
+        try:
+            if sys.platform == "win32":
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(1, False, pid)  # PROCESS_TERMINATE
+                if handle:
+                    kernel32.TerminateProcess(handle, 0)
+                    kernel32.CloseHandle(handle)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass  # already dead or we can't signal it — cleanup below is fine
+
+    _cleanup()
+    return {"running": False, "message": "daemon stopped", "pid": pid}
+
+
+def daemon_status() -> dict:
+    """Read ``daemon.json`` and return the daemon's last-known state."""
+    ensure_base_dir()
+    if DAEMON_STATUS_FILE.exists():
+        try:
+            data = json.loads(DAEMON_STATUS_FILE.read_text())
+            # Verify the reported PID is still alive.
+            pid = _read_pid()
+            data["running"] = pid is not None and _process_alive(pid)
+            return data
+        except Exception:
+            pass
+
+    pid = _read_pid()
+    return {"running": pid is not None and _process_alive(pid)}
+
+
+# ── Internal pid helpers ──────────────────────────────────────────────
+
+def _read_pid() -> int | None:
+    ensure_base_dir()
+    if not DAEMON_PID_FILE.exists():
         return None
     try:
-        return int(config.DAEMON_PID_FILE.read_text().strip())
+        return int(DAEMON_PID_FILE.read_text().strip())
     except (ValueError, OSError):
         return None
 
 
-def _cleanup_pidfile() -> None:
-    config.DAEMON_PID_FILE.unlink(missing_ok=True)
+def _write_pid(pid: int) -> None:
+    ensure_base_dir()
+    DAEMON_PID_FILE.write_text(str(pid))
 
 
-def _cleanup_status() -> None:
-    config.DAEMON_STATUS_FILE.unlink(missing_ok=True)
+def _process_alive(pid: int) -> bool:
+    """Return True if *pid* is a running process we can signal."""
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # SYNCHRONIZE
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
 
+
+def _cleanup() -> None:
+    """Remove the pidfile and status file."""
+    DAEMON_PID_FILE.unlink(missing_ok=True)
+    DAEMON_STATUS_FILE.unlink(missing_ok=True)
+
+
+# ── Daemon loop (runs in the detached subprocess) ────────────────────
 
 def _daemon_loop(interval: int, max_frames: int) -> None:
-    """Internal loop run inside the spawned subprocess. Not called directly."""
-    previous_hash: str | None = None
-    frames_analyzed = 0
-    last_change_ts: float | None = None
+    """Core loop — called by ``__main__`` when this module is run directly.
 
-    _write_status({
-        "status": "running",
-        "pid": os.getpid(),
-        "interval": interval,
-        "max_frames": max_frames,
-        "frames_analyzed": 0,
-        "last_change_ts": None,
-    })
+    Every *interval* seconds it calls ``core.capture_once()``.  If the
+    frame hasn't changed (same hash), it skips the status write.  After
+    *max_frames* changed frames (or any error / SIGTERM) it writes a
+    final status, turns the master switch off, and exits.
+    """
+    frame_count = 0
+    last_hash: str | None = None
 
-    try:
-        while frames_analyzed < max_frames:
-            if not state.is_on():
-                break
+    def _write_status(**extra: object) -> None:
+        ensure_base_dir()
+        status: dict = {
+            "frames_analyzed": frame_count,
+            "last_hash": last_hash,
+            "interval": interval,
+            "max_frames": max_frames,
+            "timestamp": time.time(),
+        }
+        status.update(extra)
+        DAEMON_STATUS_FILE.write_text(json.dumps(status, indent=2))
 
-            outcome = core.capture_once()
-            if not outcome.ok:
-                if outcome.error == "off":
-                    break
-                time.sleep(interval)
-                continue
+    def _shutdown(signum: int | None = None, _frame: object = None) -> None:
+        _write_status(status="stopped")
+        turn_off()
+        _cleanup()
+        sys.exit(0)
 
-            if outcome.sha256:
-                changed = diff.frame_changed(outcome.sha256, previous_hash)
-                if changed:
-                    frames_analyzed += 1
-                    last_change_ts = time.time()
-                    previous_hash = outcome.sha256
-                    _write_status({
-                        "status": "running",
-                        "pid": os.getpid(),
-                        "interval": interval,
-                        "max_frames": max_frames,
-                        "frames_analyzed": frames_analyzed,
-                        "last_change_ts": last_change_ts,
-                        "last_hash": previous_hash,
-                    })
+    # Register signal handlers for graceful shutdown.
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
 
-            time.sleep(interval)
-    finally:
-        if config.AUTO_OFF_ON_WATCH_END:
-            state.turn_off()
-        _write_status({
-            "status": "stopped",
-            "frames_analyzed": frames_analyzed,
-            "last_change_ts": last_change_ts,
-            "last_hash": previous_hash,
-        })
-        _cleanup_pidfile()
+    _write_status(status="running")
 
+    while frame_count < max_frames:
+        if not is_on():
+            _write_status(status="stopped", reason="switch_off")
+            _cleanup()
+            return
 
-def start_daemon(interval: int = DEFAULT_INTERVAL, max_frames: int = DEFAULT_MAX_FRAMES) -> dict:
-    """Spawn a detached subprocess running the watch loop. Returns daemon status."""
-    existing = _read_pidfile()
-    if existing is not None:
-        try:
-            os.kill(existing, 0)
-            return {"error": f"daemon already running (pid {existing})"}
-        except OSError:
-            _cleanup_pidfile()
+        time.sleep(interval)
 
-    config.ensure_base_dir()
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "screensight.watch", str(interval), str(max_frames)],
-        start_new_session=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    _write_pidfile(proc.pid)
-    return {
-        "status": "started",
-        "pid": proc.pid,
-        "interval": interval,
-        "max_frames": max_frames,
-    }
+        outcome = capture_once()
+        if not outcome.ok:
+            # Error or blocked — stop the daemon.
+            _write_status(status="error", error=outcome.error)
+            turn_off()
+            _cleanup()
+            return
+
+        if outcome.sha256 and frame_changed(outcome.sha256, last_hash):
+            last_hash = outcome.sha256
+            frame_count += 1
+            _write_status(status="running")
+
+    # Reached max_frames — stop gracefully.
+    _write_status(status="stopped", reason="max_frames")
+    turn_off()
+    _cleanup()
 
 
-def stop_daemon() -> dict:
-    """Read the pidfile, send SIGTERM, clean up."""
-    pid = _read_pidfile()
-    if pid is None:
-        return {"status": "not_running"}
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
-    _cleanup_pidfile()
-    _cleanup_status()
-    return {"status": "stopped", "pid": pid}
+# ── Entry point for ``python -m screensight.watch`` ──────────────────
 
-
-def daemon_status() -> dict:
-    """Read daemon.json and return the current status."""
-    return _read_status()
-
-
-def run(
-    interval: int = DEFAULT_INTERVAL,
-    max_frames: int = DEFAULT_MAX_FRAMES,
-) -> None:
-    """Generator-based watch loop for direct use (e.g. from MCP tools)."""
-    _daemon_loop(interval, max_frames)
-
-
-# Allow running as: python -m screensight.watch <interval> <max_frames>
 if __name__ == "__main__":
-    import argparse as _argparse
-
-    _p = _argparse.ArgumentParser(description="ScreenSight watch daemon")
-    _p.add_argument("interval", type=int, nargs="?", default=DEFAULT_INTERVAL)
-    _p.add_argument("max_frames", type=int, nargs="?", default=DEFAULT_MAX_FRAMES)
-    _args = _p.parse_args()
-    _daemon_loop(_args.interval, _args.max_frames)
+    if len(sys.argv) == 3:
+        _interval = int(sys.argv[1])
+        _max = int(sys.argv[2])
+    else:
+        _interval = DEFAULT_INTERVAL
+        _max = DEFAULT_MAX_FRAMES
+    _daemon_loop(_interval, _max)

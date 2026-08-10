@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import time
 
-from .config import STATE_FILE, ensure_base_dir
+from .config import FRAME_PATH, STATE_FILE, ensure_base_dir
 
 
 def is_on() -> bool:
@@ -29,6 +29,8 @@ def turn_on() -> None:
 def turn_off() -> None:
     ensure_base_dir()
     STATE_FILE.write_text(json.dumps({"enabled": False, "since": time.time()}))
+    # Frame hygiene: delete the frame file on off.
+    FRAME_PATH.unlink(missing_ok=True)
 
 
 def status() -> dict:

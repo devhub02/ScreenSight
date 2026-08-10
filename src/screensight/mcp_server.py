@@ -1,107 +1,227 @@
-"""MCP server exposing screen access as tools.
+"""FastMCP server exposing ScreenSight as 8 tools for any MCP-capable agent.
 
-Any MCP-compatible agent (Claude Code, Cursor, Windsurf, Cline, Codex CLI)
-can attach to this over stdio and get the same tools — this is the actual
-"works for any coding agent" part, since MCP is the one interface all of
-them converge on.
+Every tool docstring is written for the *calling agent* (AGENTS.md rule 8)
+— treat them as man-page entries, not code comments.
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 
 from . import core, state, watch
+from .config import DAEMON_STATUS_FILE, FRAME_PATH
 
 mcp = FastMCP(
-    name="screensight",
+    "screensight",
     instructions=(
-        "Gives you the ability to see the user's screen. Screen access is OFF "
-        "by default and gated by an explicit switch — call screen_enable before "
-        "any capture tool, and call screen_disable as soon as you're done, "
-        "especially before the user might show you something private. Frames are "
-        "automatically downscaled and scrubbed for redaction zones, but that is "
-        "a backup, not a substitute for turning access off when you're finished."
+        "ScreenSight lets you see the user's screen. "
+        "Use screen_capture to take a screenshot, then examine the image "
+        "to understand what's on screen. The master switch must be on "
+        "(screen_enable) before any capture works."
     ),
 )
 
 
+# ── 1. screen_enable ──────────────────────────────────────────────────
+
 @mcp.tool()
-def screen_enable() -> dict:
-    """Enable screen capture access. Required before any other screen_* tool.
-    The switch stays on until you call screen_disable."""
+def screen_enable() -> str:
+    """Turn ON the ScreenSight master switch.
+
+    The master switch must be ON before any screen capture can happen.
+    This is a safety gate — nothing is captured while it's off.
+    Call this before screen_capture if you're unsure whether it's on.
+
+    Returns the current state as JSON.
+    """
     state.turn_on()
-    return state.status()
+    s = state.status()
+    return f"ScreenSight enabled. State: {s}"
 
+
+# ── 2. screen_disable ─────────────────────────────────────────────────
 
 @mcp.tool()
-def screen_disable() -> dict:
-    """Disable screen capture access immediately and delete any cached frame."""
+def screen_disable() -> str:
+    """Turn OFF the ScreenSight master switch.
+
+    Disables all screen capture. Any running watch daemon will
+    also stop. The frame file (if any) is NOT deleted by this call —
+    use this when you want to temporarily pause captures.
+
+    Returns the current state as JSON.
+    """
     state.turn_off()
-    return state.status()
+    s = state.status()
+    return f"ScreenSight disabled. State: {s}"
 
 
-@mcp.tool()
-def screen_status() -> dict:
-    """Check whether screen access is currently on, and what displays are available."""
-    return {
-        **state.status(),
-        "displays": core.list_displays(),
-    }
-
+# ── 3. screen_status ──────────────────────────────────────────────────
 
 @mcp.tool()
-def screen_capture(question: str = "", display: int | None = None) -> str:
-    """Capture the current screen and return it as an image for you to look at.
+def screen_status() -> str:
+    """Check whether ScreenSight's master switch is on or off.
 
-    display=None captures the primary display; pass a specific display index
-    from screen_status to capture just one. The active window title is included
-    so you know what was visible. If question is given, it is echoed back so
-    your own reasoning addresses it — the tool does not call another model.
+    Returns enabled/disabled status and when it was last changed.
+    Call this to verify the switch state before attempting a capture.
+    """
+    s = state.status()
+    enabled = "ON" if s["enabled"] else "OFF"
+    return f"ScreenSight is {enabled}. Details: {s}"
 
-    Returns the file path of the captured frame (a JPEG at ~/.screensight/frame.jpg)."""
+
+# ── 4. screen_capture ─────────────────────────────────────────────────
+
+@mcp.tool()
+def screen_capture(
+    question: str = "",
+    display: int | None = None,
+) -> list:
+    """Capture the user's screen and return the image for you to examine.
+
+    Takes a screenshot of the specified display (or the primary display
+    if none is specified). Returns the captured image as a visual content
+    block along with the active window title as text.
+
+    If you provide a `question`, it will be echoed back so you can
+    address it while examining the image — the tool does not call
+    another model; *you* do the looking.
+
+    The master switch must be ON (screen_enable) before this works.
+    If the active window matches the blocklist (password managers,
+    private-browsing windows), the capture is refused for safety.
+
+    Args:
+        question: Optional question to echo back for your context.
+        display: Display index (omit for primary display).
+
+    Returns:
+        Image content block + window title text (+ echoed question if given).
+    """
     outcome = core.capture_once(display=display)
     if not outcome.ok:
-        return f"Capture failed: {outcome.error}"
+        return [f"Capture failed: {outcome.error}"]
 
-    result = f"Captured: {outcome.path}"
-    if outcome.active_window_title:
-        result += f"\nActive window: {outcome.active_window_title}"
+    result_parts: list = []
+
+    # Read the frame file and return as an MCP Image.
+    frame_path = Path(outcome.path)
+    img_bytes = frame_path.read_bytes()
+    img = Image(data=img_bytes, format="jpeg")
+    result_parts.append(img)
+
+    # Text context for the agent.
+    text_parts = [f"Active window: {outcome.active_window_title or 'unknown'}"]
+    text_parts.append(f"Frame saved to: {outcome.path}")
+    text_parts.append(f"SHA-256: {outcome.sha256}")
     if question:
-        result += f"\nQuestion: {question}"
-    return result
+        text_parts.append(f"Your question: {question}")
+    result_parts.append("\n".join(text_parts))
+
+    return result_parts
 
 
-@mcp.tool()
-def screen_watch_start(interval: int = 5, max_frames: int = 10) -> dict:
-    """Start a bounded watch session: polls the screen every interval seconds,
-    captures frames that changed, up to max_frames changed frames, then stops
-    and turns screen access off automatically. Call this instead of looping
-    screen_capture yourself — it has the unchanged-frame skip and the hard cap
-    built in so an idle screen costs nothing and a forgotten session can't run
-    forever."""
-    return watch.start_daemon(interval=interval, max_frames=max_frames)
-
+# ── 5. screen_watch_start ─────────────────────────────────────────────
 
 @mcp.tool()
-def screen_watch_stop() -> dict:
-    """Stop a running watch daemon immediately."""
-    return watch.stop_daemon()
+def screen_watch_start(
+    interval: int = 5,
+    max_frames: int = 10,
+) -> str:
+    """Start a bounded watch session that captures the screen on an interval.
 
+    Spawns a background daemon that takes a screenshot every `interval`
+    seconds, skipping unchanged frames. Stops automatically after
+    `max_frames` changed frames to avoid burning tokens.
+
+    The daemon writes its status to ~/.screensight/daemon.json so you
+    can poll progress with screen_watch_latest.
+
+    Args:
+        interval: Seconds between capture attempts (default 5).
+        max_frames: Maximum changed frames before auto-stop (default 10).
+    """
+    result = watch.start_daemon(interval=interval, max_frames=max_frames)
+    return f"Watch daemon started: {result}"
+
+
+# ── 6. screen_watch_stop ──────────────────────────────────────────────
 
 @mcp.tool()
-def screen_watch_status() -> dict:
-    """Check the status of a running or recently finished watch daemon."""
-    return watch.daemon_status()
+def screen_watch_stop() -> str:
+    """Stop a running watch daemon.
 
+    Sends SIGTERM to the background daemon process and cleans up
+    the pidfile and status file. Safe to call even if no daemon is running.
+    """
+    result = watch.stop_daemon()
+    return f"Watch daemon stopped: {result}"
+
+
+# ── 7. screen_watch_latest ────────────────────────────────────────────
 
 @mcp.tool()
-def screen_list_displays() -> list[dict]:
-    """List all available displays/monitors. Use the display index from this
-    list when calling screen_capture to target a specific screen."""
-    return core.list_displays()
+def screen_watch_latest() -> str:
+    """Get the latest status from the watch daemon.
 
+    Returns how many frames have been analyzed, the last frame hash,
+    whether the daemon is still running, and the interval/max config.
+    Useful for checking progress of a running watch session.
+    """
+    status = watch.daemon_status()
+    running = status.get("running", False)
+    frames = status.get("frames_analyzed", 0)
+    last_hash = status.get("last_hash", "none")
+    reason = status.get("reason", "")
+    daemon_status = status.get("status", "unknown")
+
+    lines = [
+        f"Daemon running: {running}",
+        f"Status: {daemon_status}",
+        f"Frames analyzed: {frames}",
+        f"Last hash: {last_hash}",
+    ]
+    if reason:
+        lines.append(f"Stop reason: {reason}")
+    if status.get("interval"):
+        lines.append(f"Interval: {status['interval']}s")
+    if status.get("max_frames"):
+        lines.append(f"Max frames: {status['max_frames']}")
+
+    return "\n".join(lines)
+
+
+# ── 8. screen_list_displays ───────────────────────────────────────────
+
+@mcp.tool()
+def screen_list_displays() -> str:
+    """List all available displays/monitors.
+
+    Returns display index, name, and dimensions for each connected
+    monitor. Use the display index with screen_capture to capture
+    a specific monitor.
+    """
+    displays = core.list_displays()
+    if not displays:
+        return "No displays found."
+
+    lines = ["Available displays:"]
+    for d in displays:
+        lines.append(
+            f"  Display {d.get('index', '?')}: "
+            f"{d.get('name', 'unknown')} "
+            f"({d.get('width', '?')}x{d.get('height', '?')})"
+        )
+    return "\n".join(lines)
+
+
+# ── Entry point ───────────────────────────────────────────────────────
 
 def run() -> None:
-    """Entry point for the screensight-mcp script."""
+    """Entry point for the `screensight-mcp` console script."""
     mcp.run()
 
 

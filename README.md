@@ -1,267 +1,259 @@
 # ScreenSight
 
-**Universal screen awareness for coding agents.** Let *any* coding agent see your screen — not just Claude Code. Ships as an MCP server, a CLI fallback, and a standalone watch daemon. No API key; runs on whatever subscription or session the agent already has.
+**Let *any* coding agent see your screen — not just Claude Code.**
 
-## Why This Exists
+MCP server + CLI fallback + a standalone watch daemon. No API key required; runs on whatever subscription/session the agent already has.
 
-Coding agents that can see your screen give far better debugging advice — but most solutions are locked to a single agent. Every other agent — Cursor, Windsurf, Cline, Codex CLI, Aider — either reinvents this or does without.
+ScreenSight generalizes screen-awareness beyond a single agent. It ships as:
 
-ScreenSight generalizes it:
+- **MCP server** — works in Cursor, Windsurf, Cline, Claude Code, Codex CLI, and any MCP-capable agent
+- **CLI** — works for Aider, raw shell agents, or any environment that can run a command
+- **Watch daemon** — a long-lived background process for interval capture with automatic stop
 
-- **MCP server** → works in any MCP-capable agent (Cursor, Windsurf, Cline, Claude Code, Codex CLI) with zero agent-specific code.
-- **CLI** → works for agents with no MCP support (Aider, raw shell agents) by shelling out.
-- **Watch daemon** → a long-lived background process that owns the interval/diffing logic once, so both the MCP tools and the CLI read its output instead of re-implementing polling.
+Inspired by [ScreenPipe](https://github.com/mediar-ai/screenpipe) — this is the agent-agnostic version.
 
-## Features
+## Install
 
-| Feature | Description |
-|---|---|
-| Cross-platform | Native backends for macOS, Linux, and Windows (including WSL) |
-| MCP + CLI | Two interfaces, same core — pick whichever your agent supports |
-| Off by default | Master switch gates every capture; no silent background access |
-| Sensitive-app blocklist | Password managers, incognito windows — captures abort automatically |
-| Zone redaction | Define screen rectangles that always get blacked out |
-| Frame hygiene | One frame file, overwritten each capture, deleted on `off` |
-| Watch mode | Bounded daemon with auto-stop — a forgotten session can't burn tokens |
-| Downscale | Frames reduced to 1568px long edge before leaving disk |
+### From source (recommended)
 
-## Installation
+```bash
+git clone <repo-url> screensight
+cd screensight
 
-Requires Python 3.10+.
+# Linux / macOS
+bash install.sh
+
+# Windows
+.\install.ps1
+```
+
+### With pip directly
 
 ```bash
 pip install .
 ```
 
-Or with `pipx` for an isolated install:
+### With pipx
 
 ```bash
 pipx install .
 ```
 
-This provides two commands:
-- `screensight` — the CLI
-- `screensight-mcp` — the MCP server
+Requires **Python 3.10+**.
 
-## Per-Agent Integration
+## MCP Configuration
 
-All MCP configs share the same shape — only the file path differs. Ready-to-use JSON files for each agent are in [`examples/`](./examples/).
-
-| Agent | Config File | Example |
-|---|---|---|
-| Claude Code | `~/.claude.json` or `.mcp.json` | [`mcp_config_claude_code.json`](./examples/mcp_config_claude_code.json) |
-| Cursor | `~/.cursor/mcp.json` | [`mcp_config_cursor.json`](./examples/mcp_config_cursor.json) |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | [`mcp_config_windsurf.json`](./examples/mcp_config_windsurf.json) |
-| Cline | VS Code settings (`cline.mcpServers`) | [`mcp_config_cline.json`](./examples/mcp_config_cline.json) |
-| OpenCode | `~/.config/opencode/opencode.json` | [`mcp_config_opencode.json`](./examples/mcp_config_opencode.json) |
-| Roo Code | VS Code settings (`roo.mcpServers`) | [`mcp_config_roo_code.json`](./examples/mcp_config_roo_code.json) |
-| Continue | `~/.continue/config.json` | [`mcp_config_continue.json`](./examples/mcp_config_continue.json) |
-| Zed | `~/.config/zed/settings.json` | [`mcp_config_zed.json`](./examples/mcp_config_zed.json) |
-| JetBrains | `~/.jetbrains/mcp.json` | [`mcp_config_jetbrains.json`](./examples/mcp_config_jetbrains.json) |
-| Avante.nvim | `~/.config/nvim/mason/mcp.json` | [`mcp_config_mason_nvim.json`](./examples/mcp_config_mason_nvim.json) |
-| CodeCompanion | Neovim plugin config | See README section above |
-| Codex CLI | `~/.codex/config.json` | [`mcp_config_codex.json`](./examples/mcp_config_codex.json) |
-| Aider | CLI only (no config) | See CLI example below |
-
-### CLI-Only Agents (Aider, Shell Scripts, etc.)
-
-No config needed. The CLI works standalone:
-
-```bash
-screensight on        # Enable screen access
-screensight capture   # Capture current screen
-screensight off       # Disable when done
-```
-
-Frame is saved at `~/.screensight/frame.jpg` — the agent reads it as a normal file/image argument.
-
-## CLI Usage
-
-```
-screensight on                           # Enable screen capture
-screensight off                          # Disable and delete cached frame
-screensight status                       # Check whether access is on
-
-screensight capture [--display N]        # Capture current screen
-screensight watch [--interval N] [--max-frames N]  # Start bounded watch session
-screensight watch-stop                   # Stop running watch daemon
-screensight watch-status                 # Check watch daemon status
-screensight displays                     # List available monitors
-```
-
-| Command | Description |
-|---|---|
-| `on` | Enable screen capture access |
-| `off` | Disable access and delete `frame.jpg` |
-| `status` | Print current on/off state |
-| `capture` | Capture the screen, print frame path as JSON |
-| `watch` | Start a background daemon that polls on an interval |
-| `watch-stop` | Stop a running watch daemon |
-| `watch-status` | Check daemon status (frame count, last change) |
-| `displays` | List available displays/monitors |
-
-**Exit codes:**
-
-| Code | Meaning |
-|---|---|
-| `0` | Success |
-| `3` | Screen access is off or capture failed |
-
-## MCP Tools
-
-When connected via MCP, the server exposes these tools:
-
-| Tool | Description |
-|---|---|
-| `screen_enable` | Turn on screen access (required before any capture) |
-| `screen_disable` | Turn off screen access and delete cached frame |
-| `screen_status` | Check current state and list available displays |
-| `screen_capture` | Capture the screen, returns frame path + active window title |
-| `screen_watch_start` | Start a bounded watch session with auto-stop |
-| `screen_watch_stop` | Stop a running watch daemon |
-| `screen_watch_status` | Check daemon status |
-| `screen_list_displays` | List all available monitors |
-
-## Privacy & Security
-
-ScreenSight is designed with privacy as a first-class concern, not an afterthought.
-
-### Master Switch
-
-Screen capture is **off by default**. The check happens inside the capture pipeline itself (`core.capture_once()`), not in a prompt or tool description — so no instruction, injected or otherwise, can talk the tool into capturing while it's off.
-
-### Sensitive-App Blocklist
-
-Before a frame is written, the active window title is checked against a blocklist. Matches abort the capture — nothing is saved, nothing is sent.
-
-**Default blocklist:** `1password`, `bitwarden`, `keychain access`, `keepass`, `lastpass`, `password`, `private browsing`, `incognito`.
-
-Extend via `~/.screensight/redact_zones.json`:
+Add this block to your agent's config file:
 
 ```json
 {
-  "blocklist": ["1password", "my-banking-app"],
+  "mcpServers": {
+    "screensight": {
+      "command": "screensight-mcp"
+    }
+  }
+}
+```
+
+| Agent | Config file location |
+|-------|---------------------|
+| Claude Code | `~/.claude.json` or project `.mcp.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Cline | VS Code settings under `cline.mcpServers` |
+| Codex CLI | `~/.codex/config.json` |
+| Aider / no MCP | No config needed — use the CLI directly |
+
+### MCP Tools (8 total)
+
+| Tool | Description |
+|------|-------------|
+| `screen_enable` | Turn ON the master switch |
+| `screen_disable` | Turn OFF the master switch |
+| `screen_status` | Check whether capture is enabled |
+| `screen_capture` | Capture screen, returns image + window title |
+| `screen_watch_start` | Start bounded watch daemon |
+| `screen_watch_stop` | Stop watch daemon |
+| `screen_watch_latest` | Get daemon status and frame count |
+| `screen_list_displays` | List available monitors |
+
+## CLI Usage
+
+```bash
+screensight on                          # Enable capture
+screensight off                         # Disable capture (deletes frame)
+screensight status                      # Check switch state
+screensight capture                     # Capture primary display
+screensight capture --display 1         # Capture specific display
+screensight watch --interval 5          # Watch every 5s (default)
+screensight watch --interval 3 --max-frames 20
+screensight watch-stop                  # Stop watch daemon
+screensight watch-status                # Check daemon status
+screensight displays                    # List monitors
+```
+
+### Example output
+
+```json
+// screensight capture
+{
+  "path": "C:\\Users\\you\\.screensight\\frame.jpg",
+  "sha256": "3d950ca5b88301d1f259bab41a35d6f0ffedd0694ead17c50e28aa4660d6dcf1",
+  "active_window_title": "main.py - myproject - Visual Studio Code"
+}
+```
+
+```json
+// screensight watch-status
+{
+  "frames_analyzed": 3,
+  "last_hash": "15dc34902d50de22a1146a9d8b9dd732f9e5c60d9dfbb41bc5b7f5a72e5bbb8b",
+  "interval": 5,
+  "max_frames": 10,
+  "status": "running",
+  "running": true
+}
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `3` | Master switch is off, or capture failed |
+
+## Privacy
+
+ScreenSight is designed with privacy as a first-class concern. Nothing is captured unless you explicitly enable it.
+
+### 1. Off by default
+
+The master switch (`~/.screensight/state.json`) gates every capture. The check happens inside `core.capture_once()` — not in a prompt or tool description — so no instruction injection can bypass it.
+
+```bash
+screensight status   # Check if it's on
+screensight on       # Enable capture
+screensight off      # Disable capture + delete frame
+```
+
+### 2. Sensitive-app blocklist
+
+Before a frame is saved, the active window title is checked against a blocklist. Matches abort the capture — nothing is saved, nothing is sent.
+
+**Default blocklist:**
+- 1Password, Bitwarden, KeePass, LastPass
+- Keychain Access
+- Private browsing / Incognito windows
+- Any window with "password" in the title
+
+**Customize:** Edit `~/.screensight/redact_zones.json`:
+
+```json
+{
+  "blocklist": ["1password", "bitwarden", "my-bank-app"],
   "zones": []
 }
 ```
 
-### Zone Redaction
+### 3. Zone redaction
 
-Define fixed screen rectangles that always get blacked out, regardless of what's displayed:
+Define fixed screen rectangles that always get blacked out before the frame is saved. Useful for permanent on-screen elements like clock widgets, note apps, or banking tools.
 
 ```json
 {
-  "blocklist": [],
   "zones": [
-    {"x": 0, "y": 0, "w": 400, "h": 300},
-    {"x": 1200, "y": 800, "w": 500, "h": 200}
+    {"x": 0, "y": 0, "w": 200, "h": 100, "label": "top-left corner"}
   ]
 }
 ```
 
-### Frame Hygiene
+### 4. Frame hygiene
 
-- **One frame file** (`~/.screensight/frame.jpg`) — overwritten each capture, never accumulates.
-- **Deleted on `off`** — `screensight off` removes the frame from disk.
-- **Downscaled** — frames reduced to 1568px long edge before anything leaves disk.
+- One frame file: `~/.screensight/frame.jpg`
+- Overwritten on every capture — never accumulates
+- Deleted on `screensight off`
+- Daemon status: `~/.screensight/daemon.json`
+- Daemon PID: `~/.screensight/daemon.pid`
 
-### Watch Mode Limits
+### 5. Watch mode self-limits
 
-- **Max 10 analyzed frames** per watch invocation (configurable via `--max-frames`).
-- **Auto-stops** when the cap is reached.
-- **Auto-disables** screen access when the watch session ends — an idle daemon can't quietly keep running.
+- Default max: 10 changed frames per watch session
+- Auto-stops after `--max-frames` reached
+- Turns off the master switch when it exits
+- Prevents idle daemons from quietly burning tokens
 
-## Architecture
+### 6. Downscale to 1568px
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full data flow diagram and module breakdown.
+Images are downscaled to 1568px long edge before leaving disk — the point past which more pixels don't help a vision model. Keeps token cost low for all consumers.
 
-```mermaid
-flowchart TD
-    subgraph state["state.py — Master On/Off Switch"]
-        stateFile["~/.screensight/state.json"]
-    end
+## Project structure
 
-    subgraph inputs["Input Surfaces"]
-        CLI["CLI (__main__.py)"]
-        MCP["MCP Server (mcp_server.py)"]
-        WatchDaemon["Watch Daemon (watch.py)"]
-    end
+```
+src/screensight/
+  __init__.py          # Package init
+  __main__.py          # CLI entry point (argparse)
+  config.py            # Paths, constants, blocklist defaults
+  state.py             # Master on/off switch
+  core.py              # capture_once() — single entrypoint
+  privacy.py           # Blocklist check, downscale + zone redaction
+  diff.py              # SHA-256 hashing, change detection
+  watch.py             # Daemon (start/stop/status + loop)
+  mcp_server.py        # FastMCP server (8 tools)
+  capture/
+    base.py            # CaptureBackend ABC
+    macos.py           # macOS (screencapture + osascript)
+    linux.py           # Linux (grim / gnome-screenshot / import)
+    windows.py         # Windows + WSL (PowerShell + System.Drawing)
 
-    subgraph core["core.py — capture_once()"]
-        capture["capture_once()"]
-    end
-
-    subgraph capture_backends["capture/ — Platform Backends"]
-        base["base.py (CaptureBackend)"]
-        macos["macos.py"]
-        linux["linux.py"]
-        windows["windows.py"]
-    end
-
-    subgraph privacy["privacy.py"]
-        blocklist["Title Blocklist Check"]
-        downscale["Downscale"]
-        redact["Zone Redact"]
-    end
-
-    subgraph diff["diff.py"]
-        hash["SHA-256 Hash"]
-        change["Change Detection"]
-    end
-
-    stateFile -->|"is_on()?"| CLI
-    stateFile -->|"is_on()?"| MCP
-    stateFile -->|"is_on()?"| WatchDaemon
-
-    CLI --> capture
-    MCP --> capture
-    WatchDaemon --> capture
-
-    capture --> base
-    base --> macos
-    base --> linux
-    base --> windows
-
-    capture --> blocklist
-    blocklist -->|"abort if blocked"| BLOCKED["Blocked"]
-    blocklist --> downscale
-    downscale --> redact
-
-    redact --> hash
-    hash --> change
-    change -->|"new frame"| WRITE["Write frame.jpg"]
-    change -->|"same as last"| SKIP["Skip"]
+tests/
+  test_state.py        # On/off round trip
+  test_privacy.py      # Blocklist matching, zone scaling
+  test_diff.py         # Hash stability, change detection
+  test_core.py         # capture_once() with mocked backend
 ```
 
-## Platform Support
+## Comparison
 
-| Platform | Backend | Active Window Title |
-|---|---|---|
-| macOS | `screencapture` | `osascript` (AppleScript) |
-| Linux | `grim` / `gnome-screenshot` / `import` | `xdotool` |
-| Windows | PowerShell + `System.Drawing` | Win32 API |
-| WSL | PowerShell (via `WSLCapture`) | Win32 API |
+| Feature | ScreenSight | ScreenPipe | Agent-specific tools |
+|---------|:-----------:|:----------:|:--------------------:|
+| Works with any MCP agent | ✅ | ❌ | ❌ |
+| CLI fallback (no MCP needed) | ✅ | ❌ | Varies |
+| Watch daemon with auto-stop | ✅ | ✅ | ❌ |
+| Master switch (off by default) | ✅ | ❌ | Varies |
+| Blocklist + zone redaction | ✅ | ❌ | ❌ |
+| No API key required | ✅ | ✅ | Varies |
+| Cross-platform | ✅ | ✅ | Varies |
+| 1568px downscale for tokens | ✅ | ❌ | ❌ |
+| Frame cleanup on off | ✅ | ❌ | ❌ |
+| Open source | ✅ | ✅ | Varies |
 
-## Dependencies
+## Development
 
-| Package | Purpose |
-|---|---|
-| `fastmcp` | MCP server framework |
-| `pillow` | Image downscaling |
+```bash
+# Create venv and install in editable mode
+python -m venv .venv
+source .venv/bin/activate        # Linux/macOS
+.\.venv\Scripts\Activate.ps1     # Windows
 
-No screenshot libraries — capture uses native OS tools via `subprocess` (keeps the "no extra app" property).
+pip install -e .
+pip install pytest               # For running tests
 
-## State Files
+# Run tests
+pytest tests/ -v
 
-All stored under `~/.screensight/`:
+# Run the MCP server for testing
+screensight-mcp                  # Starts on stdio
+fastmcp dev screensight.mcp_server:mcp   # Or via fastmcp dev
+```
 
-| File | Purpose |
-|---|---|
-| `state.json` | Master on/off switch |
-| `frame.jpg` | Current screenshot (overwritten each capture) |
-| `redact_zones.json` | Blocklist terms + redaction rectangles |
-| `daemon.json` | Watch daemon status |
-| `daemon.pid` | Watch daemon process ID |
+## Platform support
+
+| Platform | Status | Backend |
+|----------|--------|---------|
+| Windows | ✅ Tested | PowerShell + System.Drawing |
+| macOS | ⚠️ Untested | screencapture + osascript |
+| Linux | ⚠️ Untested | grim / gnome-screenshot / import + xdotool |
+| WSL | ⚠️ Untested | PowerShell (captures Windows desktop) |
 
 ## License
 
