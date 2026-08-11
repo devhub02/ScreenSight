@@ -8,4 +8,5 @@ build/
 .screensight/
 .tmp/
 .opencode/
+.claude/
 TASKS.md
