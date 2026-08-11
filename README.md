@@ -255,6 +255,20 @@ fastmcp dev screensight.mcp_server:mcp   # Or via fastmcp dev
 | Linux | ⚠️ Untested | grim / gnome-screenshot / import + xdotool |
 | WSL | ⚠️ Untested | PowerShell (captures Windows desktop) |
 
+## Contributing
+
+Contributions are welcome — bug fixes, backend improvements, and especially
+**test reports from macOS / Linux / WSL** (all currently ⚠️ untested).
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the test workflow, and the six privacy invariants
+- [PROJECT.md](PROJECT.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [AGENTS.md](AGENTS.md) explain the design
+- Report bugs or platform results via the [issue templates](.github/ISSUE_TEMPLATE)
+- Security issues: see [SECURITY.md](SECURITY.md) (report privately, not in public issues)
+- Need help? See [SUPPORT.md](SUPPORT.md)
+
+By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 MIT
+
