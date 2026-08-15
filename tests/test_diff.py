@@ -1,4 +1,5 @@
 """Tests for hash stability and change detection (diff.py)."""
+
 from __future__ import annotations
 
 from screensight.diff import sha256_of_file, frame_changed
@@ -15,7 +16,8 @@ def test_sha256_stability(tmp_path):
 
 def test_sha256_different_content():
     """Different content produces different hashes."""
-    import tempfile, os
+    import tempfile
+    import os
 
     with tempfile.NamedTemporaryFile(delete=False) as a:
         a.write(b"content A")

@@ -10,9 +10,9 @@ Neither layer is a substitute for the master switch — turn screensight off
 before doing anything sensitive. This just catches the "forgot to turn it
 off" case.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 from PIL import Image
@@ -47,6 +47,7 @@ def process_frame(path: str) -> None:
 
         if zones:
             from PIL import ImageDraw
+
             draw = ImageDraw.Draw(img)
             for z in zones:
                 draw.rectangle([z["x"], z["y"], z["x"] + z["w"], z["y"] + z["h"]], fill="black")

@@ -2,6 +2,7 @@
 daemon all route through capture_once() so the safety checks live in
 exactly one place.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

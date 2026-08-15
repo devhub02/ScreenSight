@@ -16,16 +16,20 @@ class MacOSCapture(CaptureBackend):
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if proc.returncode != 0:
                 return CaptureResult(ok=False, error=proc.stderr.strip() or "screencapture failed")
-            return CaptureResult(ok=True, path=out_path, active_window_title=self.active_window_title())
+            return CaptureResult(
+                ok=True, path=out_path, active_window_title=self.active_window_title()
+            )
         except FileNotFoundError:
             return CaptureResult(ok=False, error="screencapture not found (unexpected on macOS)")
         except subprocess.TimeoutExpired:
-            return CaptureResult(ok=False, error="screencapture timed out — check Screen Recording permission")
+            return CaptureResult(
+                ok=False, error="screencapture timed out — check Screen Recording permission"
+            )
 
     def active_window_title(self) -> Optional[str]:
         script = (
             'tell application "System Events" to get name of first application process '
-            'whose frontmost is true'
+            "whose frontmost is true"
         )
         try:
             proc = subprocess.run(
@@ -41,9 +45,12 @@ class MacOSCapture(CaptureBackend):
         try:
             proc = subprocess.run(
                 ["system_profiler", "SPDisplaysDataType", "-json"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             import json
+
             data = json.loads(proc.stdout)
             displays = []
             for gpu in data.get("SPDisplaysDataType", []):
