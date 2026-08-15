@@ -1,12 +1,13 @@
 """Tests for blocklist matching and redact-zone coordinate scaling."""
+
 from __future__ import annotations
 
-import json
 
 from screensight.privacy import title_is_blocked, process_frame, _scale_zone
 
 
 # ── Blocklist matching ────────────────────────────────────────────────
+
 
 def test_blocklist_case_insensitive():
     """Matching is case-insensitive."""
@@ -40,6 +41,7 @@ def test_blocklist_empty_title():
 
 # ── Zone scaling ──────────────────────────────────────────────────────
 
+
 def test_scale_zone_scales_coordinates():
     """_scale_zone multiplies numeric fields by the scale factor."""
     zone = {"x": 100, "y": 200, "w": 300, "h": 400, "label": "banking"}
@@ -62,6 +64,7 @@ def test_scale_zone_identity():
 
 
 # ── process_frame integration ─────────────────────────────────────────
+
 
 def test_process_frame_downscales(tmp_path, monkeypatch):
     """process_frame downscales images longer than MAX_LONG_EDGE."""

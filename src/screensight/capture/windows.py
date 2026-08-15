@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -39,10 +38,14 @@ class WindowsCapture(CaptureBackend):
         try:
             proc = subprocess.run(
                 ["powershell.exe", "-NoProfile", "-Command", script],
-                capture_output=True, text=True, timeout=20,
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
             if proc.returncode != 0:
-                return CaptureResult(ok=False, error=proc.stderr.strip() or "PowerShell capture failed")
+                return CaptureResult(
+                    ok=False, error=proc.stderr.strip() or "PowerShell capture failed"
+                )
             title = proc.stdout.strip() or None
             return CaptureResult(ok=True, path=out_path, active_window_title=title)
         except FileNotFoundError:
@@ -58,7 +61,9 @@ class WSLCapture(WindowsCapture):
     def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
         win_tmp = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", "$env:TEMP"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         ).stdout.strip()
         win_out = f"{win_tmp}\\screensight-frame.jpg"
         result = super().screenshot(win_out, display)
@@ -70,7 +75,11 @@ class WSLCapture(WindowsCapture):
                 ["wslpath", "-u", win_out], capture_output=True, text=True, timeout=5
             ).stdout.strip()
             Path(out_path).write_bytes(Path(wsl_path).read_bytes())
-            Path(wsl_path).unlink(missing_ok=True)  # delete from the Windows temp folder immediately
-            return CaptureResult(ok=True, path=out_path, active_window_title=result.active_window_title)
+            Path(wsl_path).unlink(
+                missing_ok=True
+            )  # delete from the Windows temp folder immediately
+            return CaptureResult(
+                ok=True, path=out_path, active_window_title=result.active_window_title
+            )
         except Exception as e:
             return CaptureResult(ok=False, error=f"WSL copy-back failed: {e}")

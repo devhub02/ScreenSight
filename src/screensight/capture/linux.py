@@ -34,7 +34,9 @@ class LinuxCapture(CaptureBackend):
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if proc.returncode != 0:
                 return CaptureResult(ok=False, error=proc.stderr.strip() or f"{cmd[0]} failed")
-            return CaptureResult(ok=True, path=out_path, active_window_title=self.active_window_title())
+            return CaptureResult(
+                ok=True, path=out_path, active_window_title=self.active_window_title()
+            )
         except subprocess.TimeoutExpired:
             return CaptureResult(ok=False, error=f"{cmd[0]} timed out")
 
@@ -43,7 +45,9 @@ class LinuxCapture(CaptureBackend):
             try:
                 proc = subprocess.run(
                     ["xdotool", "getactivewindow", "getwindowname"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if proc.returncode == 0:
                     return proc.stdout.strip() or None
@@ -53,8 +57,11 @@ class LinuxCapture(CaptureBackend):
 
     def _wayland_outputs(self) -> list[str]:
         try:
-            proc = subprocess.run(["swaymsg", "-t", "get_outputs"], capture_output=True, text=True, timeout=5)
+            proc = subprocess.run(
+                ["swaymsg", "-t", "get_outputs"], capture_output=True, text=True, timeout=5
+            )
             import json
+
             return [o["name"] for o in json.loads(proc.stdout)]
         except Exception:
             return []

@@ -33,12 +33,16 @@ def get_backend():
     os_name = get_os()
     if os_name == "macos":
         from .macos import MacOSCapture
+
         return MacOSCapture()
     if os_name == "windows":
         from .windows import WindowsCapture
+
         return WindowsCapture()
     if os_name == "wsl":
         from .windows import WSLCapture
+
         return WSLCapture()
     from .linux import LinuxCapture
+
     return LinuxCapture()
