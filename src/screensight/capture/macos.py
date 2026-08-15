@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Optional
 
 from .base import CaptureBackend, CaptureResult
 
 
 class MacOSCapture(CaptureBackend):
-    def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
+    def screenshot(self, out_path: str, display: int | None = None) -> CaptureResult:
         cmd = ["screencapture", "-x", "-t", "jpg"]
         if display is not None:
             cmd += ["-D", str(display + 1)]  # screencapture displays are 1-indexed
         cmd.append(out_path)
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
             if proc.returncode != 0:
                 return CaptureResult(ok=False, error=proc.stderr.strip() or "screencapture failed")
             return CaptureResult(
@@ -26,14 +25,14 @@ class MacOSCapture(CaptureBackend):
                 ok=False, error="screencapture timed out — check Screen Recording permission"
             )
 
-    def active_window_title(self) -> Optional[str]:
+    def active_window_title(self) -> str | None:
         script = (
             'tell application "System Events" to get name of first application process '
             "whose frontmost is true"
         )
         try:
             proc = subprocess.run(
-                ["osascript", "-e", script], capture_output=True, text=True, timeout=5
+                ["osascript", "-e", script], capture_output=True, text=True, timeout=5, check=False
             )
             if proc.returncode == 0:
                 return proc.stdout.strip() or None
@@ -48,6 +47,7 @@ class MacOSCapture(CaptureBackend):
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,
             )
             import json
 

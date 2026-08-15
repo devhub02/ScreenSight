@@ -13,14 +13,13 @@ off" case.
 
 from __future__ import annotations
 
-from typing import Optional
 
 from PIL import Image
 
 from .config import MAX_LONG_EDGE, load_redact_config
 
 
-def title_is_blocked(title: Optional[str]) -> bool:
+def title_is_blocked(title: str | None) -> bool:
     if not title:
         return False
     cfg = load_redact_config()
