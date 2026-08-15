@@ -97,4 +97,4 @@ as unverified. Install `xdotool`, or capture only from windows you've checked yo
 - `screensight --help` for CLI options
 - `screensight status` for the current state
 - `~/.screensight/screensight.log` for errors
-- [Open an issue on GitHub](https://github.com/himanshu231204/ScreenSight/issues)
+- [Open an issue on GitHub](https://github.com/harshitboots/ScreenSight/issues)

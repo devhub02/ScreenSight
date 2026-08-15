@@ -12,7 +12,7 @@ ScreenSight generalizes screen-awareness beyond a single agent. It ships as:
 
 Inspired by [ScreenPipe](https://github.com/mediar-ai/screenpipe) — this is the agent-agnostic version.
 
-📖 **Full documentation: [himanshu231204.github.io/ScreenSight](https://himanshu231204.github.io/ScreenSight/)**
+📖 **Full documentation: [harshitboots.github.io/ScreenSight](https://harshitboots.github.io/ScreenSight/)**
 
 ## Install
 

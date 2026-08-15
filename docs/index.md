@@ -19,7 +19,7 @@ else, and a bounded watch daemon for capture over time. No API key. Off by defau
 
 <div class="ss-hero__actions" markdown>
 [Get started](get-started/quickstart.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/himanshu231204/ScreenSight){ .md-button }
+[View on GitHub](https://github.com/harshitboots/ScreenSight){ .md-button }
 </div>
 
 <div class="ss-hero__code" markdown>

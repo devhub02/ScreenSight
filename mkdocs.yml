@@ -1,8 +1,8 @@
 site_name: ScreenSight
 site_description: Let any coding agent see your screen — MCP server, CLI, and watch daemon.
-site_url: https://himanshu231204.github.io/ScreenSight/
-repo_url: https://github.com/himanshu231204/ScreenSight
-repo_name: himanshu231204/ScreenSight
+site_url: https://harshitboots.github.io/ScreenSight/
+repo_url: https://github.com/harshitboots/ScreenSight
+repo_name: harshitboots/ScreenSight
 edit_uri: edit/main/docs/
 copyright: MIT licensed · Built with MkDocs Material
 
@@ -63,7 +63,7 @@ extra_css:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/himanshu231204/ScreenSight
+      link: https://github.com/harshitboots/ScreenSight
       name: ScreenSight on GitHub
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/screensight/

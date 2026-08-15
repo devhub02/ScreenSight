@@ -10,7 +10,7 @@ ScreenSight requires **Python 3.10+**. Installing it puts two commands on your P
 === "From source (recommended)"
 
     ```bash
-    git clone https://github.com/himanshu231204/ScreenSight screensight
+    git clone https://github.com/harshitboots/ScreenSight screensight
     cd screensight
 
     # Linux / macOS
@@ -25,7 +25,7 @@ ScreenSight requires **Python 3.10+**. Installing it puts two commands on your P
 === "pip"
 
     ```bash
-    git clone https://github.com/himanshu231204/ScreenSight screensight
+    git clone https://github.com/harshitboots/ScreenSight screensight
     cd screensight
     pip install .
     ```

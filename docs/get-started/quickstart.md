@@ -5,7 +5,7 @@ Two minutes from a fresh clone to an agent that can see your screen.
 ## 1. Install
 
 ```bash
-git clone https://github.com/himanshu231204/ScreenSight screensight
+git clone https://github.com/harshitboots/ScreenSight screensight
 cd screensight
 pip install .
 ```

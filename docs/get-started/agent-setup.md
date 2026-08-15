@@ -21,7 +21,7 @@ Every MCP-capable agent takes the same server block. Only the file it goes in ch
 | Codex CLI | `~/.codex/config.json` |
 | Aider / no MCP | No config — call the CLI directly |
 
-Ready-made snippets for each agent also ship in the repo under [`examples/`](https://github.com/himanshu231204/ScreenSight/tree/main/examples).
+Ready-made snippets for each agent also ship in the repo under [`examples/`](https://github.com/harshitboots/ScreenSight/tree/main/examples).
 
 ---
 
