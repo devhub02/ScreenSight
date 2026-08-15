@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-
-from screensight.privacy import title_is_blocked, process_frame, _scale_zone
-
+from screensight.privacy import _scale_zone, process_frame, title_is_blocked
 
 # ── Blocklist matching ────────────────────────────────────────────────
 
@@ -69,6 +67,7 @@ def test_scale_zone_identity():
 def test_process_frame_downscales(tmp_path, monkeypatch):
     """process_frame downscales images longer than MAX_LONG_EDGE."""
     from PIL import Image
+
     from screensight import privacy
 
     img_path = tmp_path / "test.jpg"
@@ -88,6 +87,7 @@ def test_process_frame_downscales(tmp_path, monkeypatch):
 def test_process_frame_applies_zones(tmp_path, monkeypatch):
     """process_frame blacks out configured redact zones."""
     from PIL import Image
+
     from screensight import privacy
 
     img_path = tmp_path / "test.jpg"

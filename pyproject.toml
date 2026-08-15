@@ -14,7 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.6",
+    "ruff>=0.16,<0.17",
 ]
 
 [project.scripts]
@@ -35,3 +35,14 @@ addopts = "-v"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+ignore = [
+    # The switch check, the redact-zone loader and the daemon status reader all
+    # swallow every exception on purpose: any failure to read state must fail
+    # closed (capture stays off, the default blocklist applies) rather than
+    # propagate. Narrowing these to specific exception types would let an
+    # unexpected error escape a privacy-critical path.
+    "BLE001", # blind-except
+    "S110",   # try-except-pass
+]

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from typing import Optional
 
 from .base import CaptureBackend, CaptureResult
 
 
 class LinuxCapture(CaptureBackend):
-    def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
+    def screenshot(self, out_path: str, display: int | None = None) -> CaptureResult:
         if shutil.which("grim"):
             cmd = ["grim"]
             if display is not None:
@@ -31,7 +30,7 @@ class LinuxCapture(CaptureBackend):
 
     def _run(self, cmd: list[str], out_path: str) -> CaptureResult:
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
             if proc.returncode != 0:
                 return CaptureResult(ok=False, error=proc.stderr.strip() or f"{cmd[0]} failed")
             return CaptureResult(
@@ -40,7 +39,7 @@ class LinuxCapture(CaptureBackend):
         except subprocess.TimeoutExpired:
             return CaptureResult(ok=False, error=f"{cmd[0]} timed out")
 
-    def active_window_title(self) -> Optional[str]:
+    def active_window_title(self) -> str | None:
         if shutil.which("xdotool"):
             try:
                 proc = subprocess.run(
@@ -48,6 +47,7 @@ class LinuxCapture(CaptureBackend):
                     capture_output=True,
                     text=True,
                     timeout=5,
+                    check=False,
                 )
                 if proc.returncode == 0:
                     return proc.stdout.strip() or None
@@ -58,7 +58,11 @@ class LinuxCapture(CaptureBackend):
     def _wayland_outputs(self) -> list[str]:
         try:
             proc = subprocess.run(
-                ["swaymsg", "-t", "get_outputs"], capture_output=True, text=True, timeout=5
+                ["swaymsg", "-t", "get_outputs"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
             )
             import json
 

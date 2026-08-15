@@ -32,7 +32,6 @@ from .core import capture_once
 from .diff import frame_changed
 from .state import is_on, turn_off
 
-
 # ── Public helpers ────────────────────────────────────────────────────
 
 DEFAULT_INTERVAL = DEFAULT_WATCH_INTERVAL

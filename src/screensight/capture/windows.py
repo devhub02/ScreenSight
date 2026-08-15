@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from .base import CaptureBackend, CaptureResult
 
@@ -33,7 +32,7 @@ Write-Output $sb.ToString()
 
 
 class WindowsCapture(CaptureBackend):
-    def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
+    def screenshot(self, out_path: str, display: int | None = None) -> CaptureResult:
         script = _PS_SCRIPT.replace("{out_path}", out_path.replace("\\", "\\\\"))
         try:
             proc = subprocess.run(
@@ -41,6 +40,7 @@ class WindowsCapture(CaptureBackend):
                 capture_output=True,
                 text=True,
                 timeout=20,
+                check=False,
             )
             if proc.returncode != 0:
                 return CaptureResult(
@@ -58,12 +58,13 @@ class WSLCapture(WindowsCapture):
     """From inside WSL, capture the real Windows desktop, then copy the
     result back across the filesystem boundary into WSL's temp dir."""
 
-    def screenshot(self, out_path: str, display: Optional[int] = None) -> CaptureResult:
+    def screenshot(self, out_path: str, display: int | None = None) -> CaptureResult:
         win_tmp = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", "$env:TEMP"],
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         ).stdout.strip()
         win_out = f"{win_tmp}\\screensight-frame.jpg"
         result = super().screenshot(win_out, display)
@@ -72,7 +73,7 @@ class WSLCapture(WindowsCapture):
 
         try:
             wsl_path = subprocess.run(
-                ["wslpath", "-u", win_out], capture_output=True, text=True, timeout=5
+                ["wslpath", "-u", win_out], capture_output=True, text=True, timeout=5, check=False
             ).stdout.strip()
             Path(out_path).write_bytes(Path(wsl_path).read_bytes())
             Path(wsl_path).unlink(
