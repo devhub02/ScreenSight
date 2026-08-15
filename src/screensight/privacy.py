@@ -13,7 +13,6 @@ off" case.
 
 from __future__ import annotations
 
-
 from PIL import Image
 
 from .config import MAX_LONG_EDGE, load_redact_config
