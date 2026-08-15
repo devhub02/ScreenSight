@@ -9,3 +9,5 @@ build/
 .tmp/
 .opencode/
 TASKS.md
+# MkDocs build output
+site/
