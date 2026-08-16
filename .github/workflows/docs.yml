@@ -30,6 +30,12 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    # pages/id-token are needed by the Configure Pages step below, which
+    # creates the Pages site on first run.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -54,6 +60,11 @@ jobs:
       - name: Configure Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
+        with:
+          # Creates the Pages site (source: GitHub Actions) if it does not
+          # exist yet, instead of failing with "Get Pages site failed" and
+          # requiring someone to flip Settings -> Pages by hand.
+          enablement: true
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
