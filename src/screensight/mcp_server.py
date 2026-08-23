@@ -78,7 +78,7 @@ def screen_status() -> str:
 # ── 4. screen_capture ─────────────────────────────────────────────────
 
 
-@mcp.tool()
+@mcp.tool(output_schema=None)
 def screen_capture(
     question: str = "",
     display: int | None = None,
