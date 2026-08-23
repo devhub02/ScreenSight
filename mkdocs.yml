@@ -115,6 +115,7 @@ nav:
       - Installation: get-started/installation.md
       - Quickstart: get-started/quickstart.md
       - Agent setup: get-started/agent-setup.md
+  - Integration: integration.md
   - Reference:
       - CLI: reference/cli.md
       - MCP tools: reference/mcp-tools.md
